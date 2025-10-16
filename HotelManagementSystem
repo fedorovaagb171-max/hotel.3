@@ -1,0 +1,685 @@
+import java.util.*;
+import java.util.stream.Collectors;
+
+// Custom exceptions
+class HotelException extends Exception {
+    public HotelException(String message) {
+        super(message);
+    }
+}
+
+class InvalidRoomNumberException extends HotelException {
+    public InvalidRoomNumberException(String message) {
+        super(message);
+    }
+}
+
+class InvalidPriceException extends HotelException {
+    public InvalidPriceException(String message) {
+        super(message);
+    }
+}
+
+class RoomNotFoundException extends HotelException {
+    public RoomNotFoundException(String message) {
+        super(message);
+    }
+}
+
+// Strategy interface
+interface DiscountStrategy {
+    double calculatePrice(double basePrice);
+    String getDescription();
+    double getDiscountValue();
+}
+
+// Concrete strategies
+class NoDiscountStrategy implements DiscountStrategy {
+    @Override
+    public double calculatePrice(double basePrice) {
+        return basePrice;
+    }
+
+    @Override
+    public String getDescription() {
+        return "No discount";
+    }
+
+    @Override
+    public double getDiscountValue() {
+        return 0;
+    }
+}
+
+class PercentageDiscountStrategy implements DiscountStrategy {
+    private double discountPercent;
+
+    public PercentageDiscountStrategy(double discountPercent) throws InvalidPriceException {
+        if (discountPercent < 0 || discountPercent > 100) {
+            throw new InvalidPriceException("Discount percentage must be between 0 and 100");
+        }
+        this.discountPercent = discountPercent;
+    }
+
+    @Override
+    public double calculatePrice(double basePrice) {
+        return basePrice * (1 - discountPercent / 100);
+    }
+
+    @Override
+    public String getDescription() {
+        return String.format("Discount %.1f%%", discountPercent);
+    }
+
+    @Override
+    public double getDiscountValue() {
+        return discountPercent;
+    }
+}
+
+class FixedAmountDiscountStrategy implements DiscountStrategy {
+    private double discountAmount;
+
+    public FixedAmountDiscountStrategy(double discountAmount) throws InvalidPriceException {
+        if (discountAmount < 0) {
+            throw new InvalidPriceException("Discount amount cannot be negative");
+        }
+        this.discountAmount = discountAmount;
+    }
+
+    @Override
+    public double calculatePrice(double basePrice) {
+        double result = basePrice - discountAmount;
+        return result > 0 ? result : 0;
+    }
+
+    @Override
+    public String getDescription() {
+        return String.format("Fixed discount %.2f", discountAmount);
+    }
+
+    @Override
+    public double getDiscountValue() {
+        return discountAmount;
+    }
+}
+
+// Abstract base class
+abstract class HotelRoom {
+    protected String roomNumber;
+    protected double basePrice;
+    protected DiscountStrategy discountStrategy;
+
+    public HotelRoom(String roomNumber, double basePrice, DiscountStrategy discountStrategy)
+            throws InvalidRoomNumberException, InvalidPriceException {
+
+        // Room number validation
+        if (roomNumber == null || roomNumber.trim().isEmpty()) {
+            throw new InvalidRoomNumberException("Room number cannot be empty");
+        }
+        if (!roomNumber.matches("[0-9]+[A-Z]?")) {
+            throw new InvalidRoomNumberException("Invalid room number format. Should be: digits[letter]");
+        }
+
+        // Price validation
+        if (basePrice <= 0) {
+            throw new InvalidPriceException("Base price must be positive");
+        }
+
+        this.roomNumber = roomNumber;
+        this.basePrice = basePrice;
+        this.discountStrategy = discountStrategy != null ? discountStrategy : new NoDiscountStrategy();
+    }
+
+    // Abstract methods
+    public abstract String getRoomType();
+    public abstract int getCapacity();
+
+    // Polymorphic methods
+    public double getFinalPrice() {
+        return discountStrategy.calculatePrice(basePrice);
+    }
+
+    public String getDescription() {
+        return String.format("Room %s (%s) - Base price: %.2f, %s, Final price: %.2f",
+                roomNumber, getRoomType(), basePrice, discountStrategy.getDescription(), getFinalPrice());
+    }
+
+    // Getters
+    public String getRoomNumber() { return roomNumber; }
+    public double getBasePrice() { return basePrice; }
+    public DiscountStrategy getDiscountStrategy() { return discountStrategy; }
+
+    public void setDiscountStrategy(DiscountStrategy discountStrategy) {
+        this.discountStrategy = discountStrategy;
+    }
+}
+
+// Concrete room classes
+class StandardRoom extends HotelRoom {
+    private int capacity;
+
+    public StandardRoom(String roomNumber, double basePrice, DiscountStrategy discountStrategy, int capacity)
+            throws InvalidRoomNumberException, InvalidPriceException {
+        super(roomNumber, basePrice, discountStrategy);
+
+        if (capacity < 1 || capacity > 4) {
+            throw new IllegalArgumentException("Standard room capacity: 1-4 people");
+        }
+        this.capacity = capacity;
+    }
+
+    @Override
+    public String getRoomType() {
+        return "Standard";
+    }
+
+    @Override
+    public int getCapacity() {
+        return capacity;
+    }
+
+    @Override
+    public String getDescription() {
+        return super.getDescription() + String.format(", Capacity: %d people", capacity);
+    }
+}
+
+class LuxuryRoom extends HotelRoom {
+    private List<String> amenities;
+
+    public LuxuryRoom(String roomNumber, double basePrice, DiscountStrategy discountStrategy, List<String> amenities)
+            throws InvalidRoomNumberException, InvalidPriceException {
+        super(roomNumber, basePrice, discountStrategy);
+        this.amenities = amenities != null ? new ArrayList<>(amenities) : new ArrayList<>();
+    }
+
+    @Override
+    public String getRoomType() {
+        return "Luxury";
+    }
+
+    @Override
+    public int getCapacity() {
+        return 2; // Luxury rooms typically for 2 people
+    }
+
+    @Override
+    public String getDescription() {
+        String amenitiesStr = amenities.isEmpty() ? "none" : String.join(", ", amenities);
+        return super.getDescription() + String.format(", Amenities: %s", amenitiesStr);
+    }
+
+    public List<String> getAmenities() {
+        return new ArrayList<>(amenities);
+    }
+}
+
+class FamilyRoom extends HotelRoom {
+    private boolean hasExtraBed;
+    private int maxChildren;
+
+    public FamilyRoom(String roomNumber, double basePrice, DiscountStrategy discountStrategy,
+                      boolean hasExtraBed, int maxChildren) throws InvalidRoomNumberException, InvalidPriceException {
+        super(roomNumber, basePrice, discountStrategy);
+
+        if (maxChildren < 0 || maxChildren > 4) {
+            throw new IllegalArgumentException("Maximum children capacity: 0-4");
+        }
+
+        this.hasExtraBed = hasExtraBed;
+        this.maxChildren = maxChildren;
+    }
+
+    @Override
+    public String getRoomType() {
+        return "Family";
+    }
+
+    @Override
+    public int getCapacity() {
+        return 2 + (hasExtraBed ? 1 : 0) + maxChildren;
+    }
+
+    @Override
+    public String getDescription() {
+        String extraBedInfo = hasExtraBed ? "yes" : "no";
+        return super.getDescription() + String.format(", Extra bed: %s, Max children: %d", extraBedInfo, maxChildren);
+    }
+}
+
+// Main Hotel class
+class Hotel {
+    private List<HotelRoom> rooms;
+
+    public Hotel() {
+        this.rooms = new ArrayList<>();
+    }
+
+    // Method to add a room
+    public void addRoom(HotelRoom room) {
+        // Check for duplicate room number (classical validation)
+        for (HotelRoom r : rooms) {
+            if (r.getRoomNumber().equals(room.getRoomNumber())) {
+                System.out.println("Error: Room with number " + room.getRoomNumber() + " already exists");
+                return;
+            }
+        }
+        rooms.add(room);
+        System.out.println("Added: " + room.getDescription());
+    }
+
+    // Method to calculate average price (polymorphism)
+    public double getAveragePrice() throws HotelException {
+        if (rooms.isEmpty()) {
+            throw new HotelException("No rooms in hotel to calculate average price");
+        }
+
+        double total = 0;
+        for (HotelRoom room : rooms) {
+            total += room.getFinalPrice(); // Polymorphic call
+        }
+
+        return total / rooms.size();
+    }
+
+    // Average price by room type
+    public double getAveragePriceByType(String roomType) throws HotelException {
+        List<HotelRoom> filteredRooms = rooms.stream()
+                .filter(room -> room.getRoomType().equals(roomType))
+                .collect(Collectors.toList());
+
+        if (filteredRooms.isEmpty()) {
+            throw new HotelException("No rooms of type: " + roomType);
+        }
+
+        double total = 0;
+        for (HotelRoom room : filteredRooms) {
+            total += room.getFinalPrice();
+        }
+
+        return total / filteredRooms.size();
+    }
+
+    // Find room by number
+    public HotelRoom findRoom(String roomNumber) throws RoomNotFoundException {
+        for (HotelRoom room : rooms) {
+            if (room.getRoomNumber().equals(roomNumber)) {
+                return room;
+            }
+        }
+        throw new RoomNotFoundException("Room with number " + roomNumber + " not found");
+    }
+
+    // Get all rooms
+    public List<HotelRoom> getAllRooms() {
+        return new ArrayList<>(rooms);
+    }
+
+    // Get rooms by type
+    public List<HotelRoom> getRoomsByType(String roomType) {
+        return rooms.stream()
+                .filter(room -> room.getRoomType().equals(roomType))
+                .collect(Collectors.toList());
+    }
+
+    // Apply discount to room
+    public void applyDiscountToRoom(String roomNumber, DiscountStrategy discountStrategy) throws RoomNotFoundException {
+        HotelRoom room = findRoom(roomNumber);
+        room.setDiscountStrategy(discountStrategy);
+        System.out.println("Updated discount for room " + roomNumber + ": " + discountStrategy.getDescription());
+    }
+
+    // Statistics
+    public void printStatistics() {
+        try {
+            System.out.println("\n=== Hotel Statistics ===");
+            System.out.printf("Total number of rooms: %d\n", rooms.size());
+            System.out.printf("Average accommodation price: %.2f\n", getAveragePrice());
+
+            // Group by room type
+            Map<String, Long> roomTypeCount = rooms.stream()
+                    .collect(Collectors.groupingBy(HotelRoom::getRoomType, Collectors.counting()));
+
+            System.out.println("Distribution by type:");
+            roomTypeCount.forEach((type, count) -> {
+                try {
+                    double avgPrice = getAveragePriceByType(type);
+                    System.out.printf("  %s: %d rooms (average price: %.2f)\n", type, count, avgPrice);
+                } catch (HotelException e) {
+                    System.out.printf("  %s: %d rooms\n", type, count);
+                }
+            });
+
+            // Total revenue
+            double totalRevenue = rooms.stream()
+                    .mapToDouble(HotelRoom::getFinalPrice)
+                    .sum();
+            System.out.printf("Total potential revenue: %.2f\n", totalRevenue);
+
+        } catch (HotelException e) {
+            System.out.println("Cannot display statistics: " + e.getMessage());
+        }
+    }
+
+    // Display all rooms
+    public void printAllRooms() {
+        System.out.println("\n=== All Hotel Rooms ===");
+        if (rooms.isEmpty()) {
+            System.out.println("No rooms in the hotel");
+            return;
+        }
+
+        for (int i = 0; i < rooms.size(); i++) {
+            HotelRoom room = rooms.get(i);
+            System.out.printf("%d. %s\n", i + 1, room.getDescription());
+        }
+    }
+}
+
+// Utility class for data input
+class InputHelper {
+    private static Scanner scanner = new Scanner(System.in);
+
+    public static double readPositiveDouble(String prompt) {
+        while (true) {
+            try {
+                System.out.print(prompt);
+                double value = scanner.nextDouble();
+                scanner.nextLine(); // clear buffer
+
+                if (value > 0) {
+                    return value;
+                } else {
+                    System.out.println("Error: value must be positive");
+                }
+            } catch (InputMismatchException e) {
+                System.out.println("Error: enter a valid number");
+                scanner.nextLine(); // clear invalid input
+            }
+        }
+    }
+
+    public static int readPositiveInt(String prompt) {
+        while (true) {
+            try {
+                System.out.print(prompt);
+                int value = scanner.nextInt();
+                scanner.nextLine(); // clear buffer
+
+                if (value > 0) {
+                    return value;
+                } else {
+                    System.out.println("Error: value must be positive");
+                }
+            } catch (InputMismatchException e) {
+                System.out.println("Error: enter an integer");
+                scanner.nextLine(); // clear invalid input
+            }
+        }
+    }
+
+    public static String readString(String prompt) {
+        System.out.print(prompt);
+        return scanner.nextLine();
+    }
+
+    public static boolean readBoolean(String prompt) {
+        while (true) {
+            System.out.print(prompt + " (yes/no): ");
+            String input = scanner.nextLine().toLowerCase();
+            if (input.equals("yes") || input.equals("y")) {
+                return true;
+            } else if (input.equals("no") || input.equals("n")) {
+                return false;
+            } else {
+                System.out.println("Error: enter 'yes' or 'no'");
+            }
+        }
+    }
+}
+
+// Main demonstration class
+public class HotelManagementSystem {
+    private static Hotel hotel = new Hotel();
+    private static Scanner scanner = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        System.out.println("=== Hotel Management System ===");
+
+        // Initialize demo data
+        initializeDemoData();
+
+        boolean running = true;
+        while (running) {
+            printMenu();
+            int choice = getMenuChoice();
+
+            switch (choice) {
+                case 1:
+                    addRoomInteractive();
+                    break;
+                case 2:
+                    hotel.printAllRooms();
+                    break;
+                case 3:
+                    hotel.printStatistics();
+                    break;
+                case 4:
+                    applyDiscountInteractive();
+                    break;
+                case 5:
+                    findRoomInteractive();
+                    break;
+                case 6:
+                    testExceptions();
+                    break;
+                case 0:
+                    running = false;
+                    System.out.println("Exiting system...");
+                    break;
+                default:
+                    System.out.println("Invalid choice");
+            }
+        }
+
+        scanner.close();
+    }
+
+    private static void printMenu() {
+        System.out.println("\n=== Main Menu ===");
+        System.out.println("1. Add room");
+        System.out.println("2. Show all rooms");
+        System.out.println("3. Hotel statistics");
+        System.out.println("4. Apply discount to room");
+        System.out.println("5. Find room by number");
+        System.out.println("6. Test exceptions");
+        System.out.println("0. Exit");
+        System.out.print("Choose action: ");
+    }
+
+    private static int getMenuChoice() {
+        try {
+            return scanner.nextInt();
+        } catch (InputMismatchException e) {
+            scanner.nextLine(); // clear buffer
+            return -1;
+        } finally {
+            scanner.nextLine(); // always clear buffer
+        }
+    }
+
+    private static void initializeDemoData() {
+        try {
+            System.out.println("Initializing demo data...");
+
+            DiscountStrategy noDiscount = new NoDiscountStrategy();
+            DiscountStrategy tenPercent = new PercentageDiscountStrategy(10);
+            DiscountStrategy fixedDiscount = new FixedAmountDiscountStrategy(500);
+            DiscountStrategy twentyPercent = new PercentageDiscountStrategy(20);
+
+            // Standard rooms
+            hotel.addRoom(new StandardRoom("101", 2000, noDiscount, 2));
+            hotel.addRoom(new StandardRoom("102", 2500, tenPercent, 3));
+            hotel.addRoom(new StandardRoom("201", 3000, fixedDiscount, 4));
+
+            // Luxury rooms
+            List<String> luxAmenities1 = Arrays.asList("Jacuzzi", "Mini-bar", "Air conditioning");
+            List<String> luxAmenities2 = Arrays.asList("Balcony", "Safe", "Dry cleaning");
+            hotel.addRoom(new LuxuryRoom("301", 5000, twentyPercent, luxAmenities1));
+            hotel.addRoom(new LuxuryRoom("302", 4500, tenPercent, luxAmenities2));
+
+            // Family rooms
+            hotel.addRoom(new FamilyRoom("401", 3500, fixedDiscount, true, 2));
+            hotel.addRoom(new FamilyRoom("402", 4000, tenPercent, false, 3));
+
+        } catch (Exception e) {
+            System.out.println("Error initializing demo data: " + e.getMessage());
+        }
+    }
+
+    private static void addRoomInteractive() {
+        try {
+            System.out.println("\n=== Add New Room ===");
+
+            String roomNumber = InputHelper.readString("Enter room number: ");
+            double basePrice = InputHelper.readPositiveDouble("Enter base price: ");
+
+            System.out.println("Choose room type:");
+            System.out.println("1. Standard");
+            System.out.println("2. Luxury");
+            System.out.println("3. Family");
+            int roomType = InputHelper.readPositiveInt("Your choice: ");
+
+            // Select discount strategy
+            DiscountStrategy discountStrategy = selectDiscountStrategy();
+
+            HotelRoom newRoom = null;
+
+            switch (roomType) {
+                case 1:
+                    int capacity = InputHelper.readPositiveInt("Enter capacity (1-4): ");
+                    newRoom = new StandardRoom(roomNumber, basePrice, discountStrategy, capacity);
+                    break;
+                case 2:
+                    List<String> amenities = new ArrayList<>();
+                    System.out.println("Enter amenities (empty line to finish):");
+                    while (true) {
+                        String amenity = InputHelper.readString("Amenity: ");
+                        if (amenity.isEmpty()) break;
+                        amenities.add(amenity);
+                    }
+                    newRoom = new LuxuryRoom(roomNumber, basePrice, discountStrategy, amenities);
+                    break;
+                case 3:
+                    boolean hasExtraBed = InputHelper.readBoolean("Has extra bed?");
+                    int maxChildren = InputHelper.readPositiveInt("Maximum number of children: ");
+                    newRoom = new FamilyRoom(roomNumber, basePrice, discountStrategy, hasExtraBed, maxChildren);
+                    break;
+                default:
+                    System.out.println("Invalid room type");
+                    return;
+            }
+
+            hotel.addRoom(newRoom);
+
+        } catch (Exception e) {
+            System.out.println("Error adding room: " + e.getMessage());
+        }
+    }
+
+    private static DiscountStrategy selectDiscountStrategy() {
+        System.out.println("\nChoose discount type:");
+        System.out.println("1. No discount");
+        System.out.println("2. Percentage discount");
+        System.out.println("3. Fixed amount discount");
+
+        int choice = InputHelper.readPositiveInt("Your choice: ");
+
+        try {
+            switch (choice) {
+                case 1:
+                    return new NoDiscountStrategy();
+                case 2:
+                    double percent = InputHelper.readPositiveDouble("Enter discount percentage (0-100): ");
+                    return new PercentageDiscountStrategy(percent);
+                case 3:
+                    double amount = InputHelper.readPositiveDouble("Enter discount amount: ");
+                    return new FixedAmountDiscountStrategy(amount);
+                default:
+                    System.out.println("Invalid choice, using 'No discount'");
+                    return new NoDiscountStrategy();
+            }
+        } catch (InvalidPriceException e) {
+            System.out.println("Error: " + e.getMessage() + ", using 'No discount'");
+            return new NoDiscountStrategy();
+        }
+    }
+
+    private static void applyDiscountInteractive() {
+        try {
+            String roomNumber = InputHelper.readString("Enter room number to apply discount: ");
+            DiscountStrategy discountStrategy = selectDiscountStrategy();
+            hotel.applyDiscountToRoom(roomNumber, discountStrategy);
+        } catch (RoomNotFoundException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    private static void findRoomInteractive() {
+        try {
+            String roomNumber = InputHelper.readString("Enter room number to find: ");
+            HotelRoom room = hotel.findRoom(roomNumber);
+            System.out.println("Found room: " + room.getDescription());
+        } catch (RoomNotFoundException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+
+    private static void testExceptions() {
+        System.out.println("\n=== Testing Exceptions ===");
+
+        // Test empty room number
+        try {
+            new StandardRoom("", 2000, new NoDiscountStrategy(), 2);
+        } catch (Exception e) {
+            System.out.println("1. Empty room number: " + e.getMessage());
+        }
+
+        // Test invalid room number format
+        try {
+            new StandardRoom("ABC", 2000, new NoDiscountStrategy(), 2);
+        } catch (Exception e) {
+            System.out.println("2. Invalid room number format: " + e.getMessage());
+        }
+
+        // Test negative price
+        try {
+            new StandardRoom("103", -1000, new NoDiscountStrategy(), 2);
+        } catch (Exception e) {
+            System.out.println("3. Negative price: " + e.getMessage());
+        }
+
+        // Test invalid discount percentage
+        try {
+            new PercentageDiscountStrategy(150);
+        } catch (Exception e) {
+            System.out.println("4. Invalid discount percentage: " + e.getMessage());
+        }
+
+        // Test finding non-existent room
+        try {
+            hotel.findRoom("999");
+        } catch (Exception e) {
+            System.out.println("5. Finding non-existent room: " + e.getMessage());
+        }
+
+        // Test average price for empty hotel
+        Hotel emptyHotel = new Hotel();
+        try {
+            emptyHotel.getAveragePrice();
+        } catch (Exception e) {
+            System.out.println("6. Average price for empty hotel: " + e.getMessage());
+        }
+    }
+}
