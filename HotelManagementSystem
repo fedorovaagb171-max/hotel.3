@@ -1,35 +1,281 @@
 import java.util.*;
+import java.util.function.Consumer;
 
 public class Main {
-    public static void main(String[] args) {
-        Hotel hotel = new Hotel();
+    private static Hotel hotel = new Hotel();
+    private static Scanner scanner = new Scanner(System.in);
 
+    public static void main(String[] args) {
+        initializeSampleData();
+        showMenu();
+    }
+
+    private static void initializeSampleData() {
         // Pricing strategies (Strategy pattern)
         PricingStrategy noDisc = new NoDiscountStrategy();
         PricingStrategy disc10 = new PercentageDiscountStrategy(10);
         PricingStrategy disc25 = new PercentageDiscountStrategy(25);
         PricingStrategy disc50 = new PercentageDiscountStrategy(50);
 
-        // Add rooms of different types (inheritance + polymorphism)
-        hotel.addRoom(new StandardRoom(101, 100.0, noDisc));   // 100.00
-        hotel.addRoom(new DeluxeRoom(201, 200.0, disc10));     // 180.00
-        hotel.addRoom(new SuiteRoom(301, 400.0, disc25));      // 300.00
-        hotel.addRoom(new StandardRoom(102, 120.0, disc10));   // 108.00
-        hotel.addRoom(new StandardRoom(103, 150.0, disc50));   // 75.00
+        // Add sample rooms of different types
+        hotel.addRoom(new StandardRoom(101, 100.0, noDisc));
+        hotel.addRoom(new DeluxeRoom(201, 200.0, disc10));
+        hotel.addRoom(new SuiteRoom(301, 400.0, disc25));
+        hotel.addRoom(new StandardRoom(102, 120.0, disc10));
+        hotel.addRoom(new StandardRoom(103, 150.0, disc50));
+    }
 
-        // Display list of all rooms
-        System.out.println("List of hotel rooms:");
+    private static void showMenu() {
+        while (true) {
+            System.out.println("\n=== HOTEL MANAGEMENT SYSTEM ===");
+            System.out.println("1. Show all rooms");
+            System.out.println("2. Add new room");
+            System.out.println("3. Show hotel statistics");
+            System.out.println("4. Find room by number");
+            System.out.println("5. Remove room");
+            System.out.println("6. Change room pricing strategy");
+            System.out.println("7. Calculate booking cost");
+            System.out.println("8. Exit");
+            System.out.print("Choose an option (1-8): ");
+
+            try {
+                int choice = scanner.nextInt();
+                scanner.nextLine(); // consume newline
+
+                switch (choice) {
+                    case 1 -> showAllRooms();
+                    case 2 -> addNewRoom();
+                    case 3 -> showHotelStatistics();
+                    case 4 -> findRoomByNumber();
+                    case 5 -> removeRoom();
+                    case 6 -> changeRoomPricingStrategy();
+                    case 7 -> calculateBookingCost();
+                    case 8 -> {
+                        System.out.println("Goodbye!");
+                        return;
+                    }
+                    default -> System.out.println("Invalid option! Please choose 1-8.");
+                }
+            } catch (InputMismatchException e) {
+                System.out.println("Please enter a valid number!");
+                scanner.nextLine(); // clear invalid input
+            } catch (Exception e) {
+                System.out.println("Error: " + e.getMessage());
+            }
+        }
+    }
+
+    private static void showAllRooms() {
+        System.out.println("\n--- ALL ROOMS ---");
+        if (hotel.countRooms() == 0) {
+            System.out.println("No rooms available.");
+            return;
+        }
+
         for (Room room : hotel.getRooms()) {
             System.out.println("  - " + room);
         }
+    }
 
-        // Summary statistics
-        System.out.println();
-        System.out.println("Hotel summary:");
-        System.out.println("  • Total rooms: " + hotel.countRooms());
-        System.out.printf(Locale.US, "  • Minimum final price: %.2f%n", hotel.minFinalPrice());
-        System.out.printf(Locale.US, "  • Maximum final price: %.2f%n", hotel.maxFinalPrice());
-        System.out.printf(Locale.US, "  • Average final price: %.2f%n", hotel.averageFinalPrice());
+    private static void addNewRoom() {
+        System.out.println("\n--- ADD NEW ROOM ---");
+
+        try {
+            System.out.print("Enter room number: ");
+            int number = scanner.nextInt();
+
+            System.out.print("Enter base price: ");
+            double basePrice = scanner.nextDouble();
+            scanner.nextLine(); // consume newline
+
+            // Проверка цены перед созданием номера
+            if (basePrice > 30000) {
+                throw new InvalidRoomDataException("Base price cannot exceed 30000.00");
+            }
+
+            System.out.print("Enter room type (standard/deluxe/suite): ");
+            String type = scanner.nextLine().toLowerCase();
+
+            System.out.print("Enter discount percentage (0-100): ");
+            int discountPercent = scanner.nextInt();
+            scanner.nextLine(); // consume newline
+
+            PricingStrategy pricing = (discountPercent == 0)
+                    ? new NoDiscountStrategy()
+                    : new PercentageDiscountStrategy(discountPercent);
+
+            hotel.addRoom(number, basePrice, pricing, type);
+            System.out.println("Room added successfully!");
+
+        } catch (InputMismatchException e) {
+            System.out.println("Invalid input format!");
+            scanner.nextLine(); // clear invalid input
+        } catch (Exception e) {
+            System.out.println("Error adding room: " + e.getMessage());
+        }
+    }
+
+    private static void showHotelStatistics() {
+        System.out.println("\n--- HOTEL STATISTICS ---");
+        try {
+            System.out.println("Total rooms: " + hotel.countRooms());
+            System.out.printf(Locale.US, "Minimum final price: %.2f%n", hotel.minFinalPrice());
+            System.out.printf(Locale.US, "Maximum final price: %.2f%n", hotel.maxFinalPrice());
+            System.out.printf(Locale.US, "Average final price: %.2f%n", hotel.averageFinalPrice());
+
+            // Additional statistics
+            showPriceDistribution();
+
+        } catch (Exception e) {
+            System.out.println("Error calculating statistics: " + e.getMessage());
+        }
+    }
+
+    private static void showPriceDistribution() {
+        Map<String, Integer> typeCount = new HashMap<>();
+        Map<String, Double> typeTotalPrice = new HashMap<>();
+
+        for (Room room : hotel.getRooms()) {
+            String type = room.getType();
+            typeCount.put(type, typeCount.getOrDefault(type, 0) + 1);
+            typeTotalPrice.put(type, typeTotalPrice.getOrDefault(type, 0.0) + room.finalPrice());
+        }
+
+        System.out.println("\nPrice distribution by room type:");
+        for (String type : typeCount.keySet()) {
+            int count = typeCount.get(type);
+            double avgPrice = typeTotalPrice.get(type) / count;
+            System.out.printf(Locale.US, "  %s: %d rooms, average price: %.2f%n",
+                    type, count, avgPrice);
+        }
+    }
+
+    private static void findRoomByNumber() {
+        System.out.println("\n--- FIND ROOM BY NUMBER ---");
+        System.out.print("Enter room number: ");
+
+        try {
+            int number = scanner.nextInt();
+            scanner.nextLine(); // consume newline
+
+            Optional<Room> foundRoom = hotel.findRoomByNumber(number);
+
+            if (foundRoom.isPresent()) {
+                Room room = foundRoom.get();
+                System.out.println("Room found:");
+                System.out.println("  - " + room);
+                System.out.printf(Locale.US, "  - Base price: %.2f%n", room.getBasePrice());
+                System.out.printf(Locale.US, "  - Final price: %.2f%n", room.finalPrice());
+                System.out.println("  - Pricing strategy: " + room.getPricingStrategy().getDescription());
+            } else {
+                System.out.println("Room not found!");
+            }
+
+        } catch (InputMismatchException e) {
+            System.out.println("Please enter a valid room number!");
+            scanner.nextLine(); // clear invalid input
+        }
+    }
+
+    private static void removeRoom() {
+        System.out.println("\n--- REMOVE ROOM ---");
+        System.out.print("Enter room number to remove: ");
+
+        try {
+            int number = scanner.nextInt();
+            scanner.nextLine(); // consume newline
+
+            if (hotel.removeRoom(number)) {
+                System.out.println("Room " + number + " removed successfully!");
+            } else {
+                System.out.println("Room not found!");
+            }
+
+        } catch (InputMismatchException e) {
+            System.out.println("Please enter a valid room number!");
+            scanner.nextLine(); // clear invalid input
+        }
+    }
+
+    private static void changeRoomPricingStrategy() {
+        System.out.println("\n--- CHANGE ROOM PRICING STRATEGY ---");
+        System.out.print("Enter room number: ");
+
+        try {
+            int number = scanner.nextInt();
+            scanner.nextLine(); // consume newline
+
+            Optional<Room> foundRoom = hotel.findRoomByNumber(number);
+
+            if (foundRoom.isPresent()) {
+                Room room = foundRoom.get();
+                System.out.println("Current room: " + room);
+
+                System.out.print("Enter new discount percentage (0-100): ");
+                int newDiscount = scanner.nextInt();
+                scanner.nextLine(); // consume newline
+
+                PricingStrategy newPricing = (newDiscount == 0)
+                        ? new NoDiscountStrategy()
+                        : new PercentageDiscountStrategy(newDiscount);
+
+                if (hotel.updateRoomPricingStrategy(number, newPricing)) {
+                    System.out.println("Pricing strategy updated successfully!");
+                    System.out.println("New room details: " + hotel.findRoomByNumber(number).get());
+                } else {
+                    System.out.println("Failed to update pricing strategy!");
+                }
+
+            } else {
+                System.out.println("Room not found!");
+            }
+
+        } catch (InputMismatchException e) {
+            System.out.println("Invalid input format!");
+            scanner.nextLine(); // clear invalid input
+        }
+    }
+
+    private static void calculateBookingCost() {
+        System.out.println("\n--- CALCULATE BOOKING COST ---");
+        System.out.print("Enter room number: ");
+
+        try {
+            int number = scanner.nextInt();
+            scanner.nextLine(); // consume newline
+
+            Optional<Room> foundRoom = hotel.findRoomByNumber(number);
+
+            if (foundRoom.isPresent()) {
+                Room room = foundRoom.get();
+                System.out.println("Selected room: " + room.getType() + " #" + room.getNumber());
+                System.out.printf(Locale.US, "Price per night: %.2f%n", room.finalPrice());
+
+                System.out.print("Enter number of nights (1-30): ");
+                int nights = scanner.nextInt();
+                scanner.nextLine(); // consume newline
+
+                // Проверка количества ночей
+                if (nights <= 0) {
+                    throw new InvalidRoomDataException("Number of nights must be positive");
+                }
+                if (nights > 30) {
+                    throw new InvalidRoomDataException("Number of nights cannot exceed 30");
+                }
+
+                double totalCost = room.finalPrice() * nights;
+                System.out.printf(Locale.US, "Total cost for %d nights: %.2f%n", nights, totalCost);
+
+            } else {
+                System.out.println("Room not found!");
+            }
+
+        } catch (InputMismatchException e) {
+            System.out.println("Please enter valid numbers!");
+            scanner.nextLine(); // clear invalid input
+        } catch (Exception e) {
+            System.out.println("Error calculating booking cost: " + e.getMessage());
+        }
     }
 }
 
@@ -37,7 +283,7 @@ public class Main {
 
 interface PricingStrategy {
     double computePrice(double basePrice);
-    String getDescription(); // Added method for description
+    String getDescription();
 }
 
 // Strategy: no discount
@@ -46,12 +292,12 @@ class NoDiscountStrategy implements PricingStrategy {
     public double computePrice(double basePrice) {
         return basePrice;
     }
-    
+
     @Override
     public String getDescription() {
         return "No discount";
     }
-    
+
     @Override
     public String toString() {
         return getDescription();
@@ -75,24 +321,24 @@ class PercentageDiscountStrategy implements PricingStrategy {
             throw new IllegalArgumentException("Base price cannot be negative");
         }
         double discountedPrice = basePrice * (100.0 - percent) / 100.0;
-        
+
         // Additional check to ensure price doesn't go below zero
         if (discountedPrice < 0) {
             throw new IllegalStateException("Calculated price cannot be negative");
         }
-        
+
         return discountedPrice;
     }
 
     public int getPercent() {
         return percent;
     }
-    
+
     @Override
     public String getDescription() {
         return percent + "% discount";
     }
-    
+
     @Override
     public String toString() {
         return getDescription();
@@ -116,7 +362,7 @@ class DuplicateRoomNumberException extends RuntimeException {
 // ---------- ROOM HIERARCHY ----------
 
 abstract class Room {
-    private static final double MAX_BASE_PRICE = 5999.00;
+    private static final double MAX_BASE_PRICE = 30000.00;
 
     private final int number;
     private final double basePrice;
@@ -142,7 +388,7 @@ abstract class Room {
     public int getNumber() { return number; }
     public double getBasePrice() { return basePrice; }
     public PricingStrategy getPricingStrategy() { return pricing; }
-    
+
     // Polymorphic final price calculation using strategy
     public double finalPrice() {
         return pricing.computePrice(basePrice);
@@ -210,6 +456,30 @@ class Hotel {
             default -> throw new InvalidRoomDataException("Unknown room type: " + type);
         };
         addRoom(room);
+    }
+
+    public boolean removeRoom(int roomNumber) {
+        return rooms.remove(roomNumber) != null;
+    }
+
+    public boolean updateRoomPricingStrategy(int roomNumber, PricingStrategy newPricing) {
+        Room existingRoom = rooms.get(roomNumber);
+        if (existingRoom != null) {
+            // Create a new room with the same properties but different pricing strategy
+            Room updatedRoom = switch (existingRoom.getType().toLowerCase(Locale.ROOT)) {
+                case "standard" -> new StandardRoom(existingRoom.getNumber(), existingRoom.getBasePrice(), newPricing);
+                case "deluxe"   -> new DeluxeRoom(existingRoom.getNumber(), existingRoom.getBasePrice(), newPricing);
+                case "suite"    -> new SuiteRoom(existingRoom.getNumber(), existingRoom.getBasePrice(), newPricing);
+                default -> throw new InvalidRoomDataException("Unknown room type: " + existingRoom.getType());
+            };
+            rooms.put(roomNumber, updatedRoom);
+            return true;
+        }
+        return false;
+    }
+
+    public Optional<Room> findRoomByNumber(int number) {
+        return Optional.ofNullable(rooms.get(number));
     }
 
     public double averageFinalPrice() {
